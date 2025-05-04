@@ -1,0 +1,148 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model for authentication and basic information
+model User {
+  id                String              @id @default(uuid())
+  email             String              @unique
+  firstName         String
+  lastName          String
+  password          String              // Hashed password
+  biometricToken    String?             // Token for biometric verification
+  biometricEnabled  Boolean             @default(false)
+  pushToken         String?             // For push notifications
+  roleAssignments   RoleAssignment[]
+  accessRequests    AccessRequest[]     @relation("Requester")
+  approvalRequests  AccessRequest[]     @relation("Approver")
+  auditLogs         AuditLog[]
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  repositories      Repository[]
+}
+
+// Organization for multi-tenant support
+model Organization {
+  id             String        @id @default(uuid())
+  name           String
+  repositories   Repository[]
+  roles          Role[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+// Repository model
+model Repository {
+  id               String             @id @default(uuid())
+  name             String
+  description      String?
+  gitProvider      GitProvider
+  gitRepoUrl       String
+  organizationId   String
+  organization     Organization       @relation(fields: [organizationId], references: [id])
+  ownerId          String
+  owner            User               @relation(fields: [ownerId], references: [id])
+  accessRequests   AccessRequest[]
+  roleAssignments  RoleAssignment[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+}
+
+// Role model for RBAC
+model Role {
+  id               String           @id @default(uuid())
+  name             String
+  description      String?
+  permissions      Permission[]
+  organizationId   String
+  organization     Organization     @relation(fields: [organizationId], references: [id])
+  roleAssignments  RoleAssignment[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+}
+
+// Permission model
+model Permission {
+  id        String   @id @default(uuid())
+  action    String   // e.g., "read", "write", "delete", "admin"
+  roleId    String
+  role      Role     @relation(fields: [roleId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Role assignment model connecting users, roles, and repositories
+model RoleAssignment {
+  id           String     @id @default(uuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id])
+  repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id])
+  expiresAt    DateTime?  // For temporary access
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+// Access Request model for JIT approvals
+model AccessRequest {
+  id               String              @id @default(uuid())
+  requesterId      String
+  requester        User                @relation("Requester", fields: [requesterId], references: [id])
+  repositoryId     String
+  repository       Repository          @relation(fields: [repositoryId], references: [id])
+  roleId           String?             // Optional, can be null if requesting custom permissions
+  requestedActions String[]            // Custom actions if role is null
+  reason           String
+  status           AccessRequestStatus @default(PENDING)
+  approverId       String?
+  approver         User?               @relation("Approver", fields: [approverId], references: [id])
+  expiresAt        DateTime?           // For temporary access
+  approvedAt       DateTime?
+  rejectedAt       DateTime?
+  requiresMultiApproval Boolean        @default(false)
+  approvalCount    Int                 @default(0)
+  approverIds      String[]            // Array of approver IDs for multi-approval
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+}
+
+// Audit log for compliance reporting
+model AuditLog {
+  id            String         @id @default(uuid())
+  action        String
+  entityType    String         // e.g., "repository", "user", "role"
+  entityId      String
+  description   String
+  metadata      Json?
+  userId        String
+  user          User           @relation(fields: [userId], references: [id])
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime       @default(now())
+}
+
+enum AccessRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum GitProvider {
+  GITHUB
+  GITLAB
+  BITBUCKET
+}
