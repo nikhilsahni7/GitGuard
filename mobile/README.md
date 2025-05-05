@@ -1,18 +1,22 @@
-# GitGuard Mobile App
+# 📱 GitGuard Mobile App
+
+_Part of the [GitGuard](https://github.com/nikhilsahni7/GitGuard) solution for the Permit.io Authorization Challenge_
 
 The GitGuard mobile application is designed to provide secure repository access management on the go. This React Native application interfaces with the GitGuard backend API for authentication, profile management, and repository access controls.
 
-## Features
+## 🚀 Key Features
 
-- **User Authentication**: Secure login and registration with JWT token management
-- **Biometric Authentication**: Optional biometric authentication for enhanced security
-- **Profile Management**: View and edit user profiles
-- **Repository Access**: Manage repository access and permissions
-- **Access Request Approval**: Approve or deny repository access requests
+- **🔒 Biometric Authentication**: Secure approvals with fingerprint/face ID
+- **📱 Push Notifications**: Real-time alerts for access requests
+- **🗂️ Repository Management**: Browse and manage GitHub repositories
+- **🔑 Access Request Workflow**: Request, approve, or deny access on the go
+- **👤 User Profile Management**: Manage credentials and preferences
+- **📊 Audit Log Visualization**: View access history and activity logs
+- **🌐 Multi-Organization Support**: Work across multiple GitHub organizations
 
-## Architecture
+## 🧩 Architecture
 
-### Directory Structure
+### 📂 Directory Structure
 
 ```
 mobile/
@@ -33,35 +37,74 @@ mobile/
 └── index.ts            # Entry point
 ```
 
-### Backend Integration
+### 🔌 Backend Integration
 
-The mobile app integrates with the GitGuard backend API through a set of services:
+The mobile app integrates with the GitGuard backend API, which leverages Permit.io for authorization:
 
-- **API Client**: Centralized API client with authentication token handling and automatic token refresh
-- **Auth Service**: Manages user authentication (login, register, biometric auth)
-- **User Service**: Handles user profile operations
-- **Repository Service**: Manages repository access and operations
-- **Access Request Service**: Handles access request creation and approval
+- **🔑 Auth Service**: Manages secure authentication with JWT tokens
+- **👤 User Service**: Handles profile operations and preference management
+- **📂 Repository Service**: Interfaces with GitHub repositories through backend API
+- **📝 Access Request Service**: Manages the creation and approval of access requests
+- **📱 Biometric Service**: Handles secure fingerprint/face ID verification
 
-## State Management
+## 🎨 UI Components
 
-The app uses Zustand for state management, with the following main stores:
+The app uses a consistent design system with these components:
 
-- **User Store**: Manages user authentication state and profile data
-- **Repository Store**: Manages repository data and access permissions
-- **Access Request Store**: Manages pending access requests
+```tsx
+// Button component with primary styling
+<Button
+  variant="primary"
+  text="Approve Request"
+  onPress={handleApprove}
+  leftIcon="check-circle"
+/>
 
-## UI Components
+// Card component for repository items
+<RepositoryCard
+  name="GitGuard"
+  owner="nikhilsahni7"
+  description="Just-in-Time GitHub Access Control"
+  onPress={() => navigateToDetails(repo.id)}
+/>
 
-The app uses a consistent design system with reusable components:
+// Using the project theme
+import { colors, typography, spacing } from '../../styles/theme';
 
-- **Button**: Customizable button component with variants
-- **Card**: Card container component for content
-- **Input**: Form input component with validation
-- **GradientBackground**: Background component with customizable gradient
-- **ScreenHeader**: Consistent header for all screens
+const styles = StyleSheet.create({
+  container: {
+    backgroundColor: colors.background.dark,
+    padding: spacing.lg,
+    borderRadius: borderRadius.md,
+  },
+  title: {
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xl,
+    color: colors.text.primary,
+  },
+});
+```
 
-## Setup and Development
+## 🔐 Authorization Flow
+
+The mobile app interacts with Permit.io indirectly through the backend API:
+
+1. **👤 User Authentication**: Secure login with JWT token
+2. **📱 Device Registration**: Register device for push notifications
+3. **📋 Access Requests**: Create access requests for specific repositories
+4. **👍 Approval Flow**:
+   - Admin receives push notification
+   - Opens app and views request details
+   - Authenticates with biometrics
+   - Backend verifies and uses Permit.io to grant role
+
+This architecture ensures:
+
+- **🔒 Security**: Sensitive operations require biometric verification
+- **🔄 Real-time Updates**: Changes in permissions are immediately reflected
+- **📊 Audit Trail**: All actions are logged for compliance and transparency
+
+## 📦 Setup and Usage
 
 ### Prerequisites
 
@@ -74,8 +117,8 @@ The app uses a consistent design system with reusable components:
 1. Clone the repository:
 
    ```
-   git clone https://github.com/yourusername/gitguard.git
-   cd gitguard/mobile
+   git clone https://github.com/nikhilsahni7/GitGuard.git
+   cd GitGuard/mobile
    ```
 
 2. Install dependencies:
@@ -99,42 +142,27 @@ This will start the Expo development server. You can then run the app on:
 - Android emulator
 - Physical device using the Expo Go app
 
-### Building for Production
+## 🤝 Integration with Permit.io
 
-```
-expo build:android
-expo build:ios
-```
+While the mobile app doesn't directly call Permit.io APIs, it consumes authorization decisions made by the backend:
 
-## Authentication Flow
+1. **🔐 Permission-aware UI**: The UI adapts based on user permissions
+2. **⏱️ Time-bound Access**: Shows remaining time for temporary access
+3. **📋 Role-based Displays**: Shows only permitted actions based on roles
+4. **🔄 Dynamic Updates**: Reflects permission changes in real-time
 
-1. **Login/Registration**: User authenticates via email/password
-2. **JWT Token**: Server returns JWT token stored in secure storage
-3. **API Requests**: Token automatically included in API requests
-4. **Token Refresh**: Automatic token refresh when expired
-5. **Biometric Auth**: Optional biometric authentication for enhanced security
+This creates a seamless user experience where authorization is both powerful and invisible.
 
-## Backend API Integration
+## 🏁 Development Considerations
 
-The app communicates with the following API endpoints:
+When extending the mobile app:
 
-### Authentication
+1. **🔒 Security First**: All sensitive operations should use biometric verification
+2. **🎨 Consistent Design**: Follow the theme system in `src/styles/theme.ts`
+3. **🧩 Component Reuse**: Leverage existing components for consistency
+4. **📱 Responsive Design**: Test on multiple device sizes
 
-- `POST /api/auth/signup`: Register a new user
-- `POST /api/auth/login`: Authenticate and receive JWT token
-- `POST /api/auth/refresh`: Refresh JWT token
-- `POST /api/auth/biometric/setup`: Set up biometric authentication
-- `POST /api/auth/biometric/verify`: Verify biometric authentication
+---
 
-### User Profile
-
-- `GET /api/users/me`: Get current user profile
-- `PUT /api/users/me`: Update user profile
-- `PUT /api/users/push-token`: Update push notification token
-
-### Repositories and Access
-
-- `GET /api/repositories`: Get user repositories
-- `GET /api/access-requests`: Get pending access requests
-- `POST /api/access-requests/:id/approve`: Approve access request
-- `POST /api/access-requests/:id/reject`: Reject access request
+**Built with ❤️ using:**
+`React Native` • `Expo` • `TypeScript` • `Zustand` • `React Navigation`
