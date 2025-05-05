@@ -1,9 +1,9 @@
-import express from 'express';
-import { z } from 'zod';
-import { prisma } from '../index';
-import { authenticateJwt, type AuthRequest } from '../middleware/auth';
-import { ApiError } from '../middleware/errorHandler';
-import { checkPermission, createResourceInPermit } from '../utils/permitUtils';
+import express from "express";
+import { z } from "zod";
+import { prisma } from "../index";
+import { authenticateJwt, type AuthRequest } from "../middleware/auth";
+import { ApiError } from "../middleware/errorHandler";
+import { checkPermission, createResourceInPermit } from "../utils/permitUtils";
 
 const router = express.Router();
 
@@ -11,7 +11,7 @@ const router = express.Router();
 const createRepoSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
-  gitProvider: z.enum(['GITHUB', 'GITLAB', 'BITBUCKET']),
+  gitProvider: z.enum(["GITHUB", "GITLAB", "BITBUCKET"]),
   gitRepoUrl: z.string().url(),
   organizationId: z.string().uuid(),
 });
@@ -28,10 +28,10 @@ const updateRepoSchema = z.object({
  * @desc Create a new repository
  * @access Private
  */
-router.post('/', authenticateJwt, async (req: AuthRequest, res, next) => {
+router.post("/", authenticateJwt, async (req: AuthRequest, res, next) => {
   try {
     if (!req.user) {
-      throw new ApiError(401, 'User not authenticated');
+      throw new ApiError(401, "User not authenticated");
     }
 
     const validatedData = createRepoSchema.parse(req.body);
@@ -42,7 +42,7 @@ router.post('/', authenticateJwt, async (req: AuthRequest, res, next) => {
     });
 
     if (!organization) {
-      throw new ApiError(404, 'Organization not found');
+      throw new ApiError(404, "Organization not found");
     }
 
     // Create repository
@@ -73,18 +73,18 @@ router.post('/', authenticateJwt, async (req: AuthRequest, res, next) => {
     // Create audit log entry
     await prisma.auditLog.create({
       data: {
-        action: 'REPOSITORY_CREATED',
-        entityType: 'repository',
+        action: "REPOSITORY_CREATED",
+        entityType: "repository",
         entityId: repository.id,
         description: `Repository "${repository.name}" created`,
         userId: req.user.id,
         ipAddress: req.ip,
-        userAgent: req.headers['user-agent'] || '',
+        userAgent: req.headers["user-agent"] || "",
       },
     });
 
     res.status(201).json({
-      message: 'Repository created successfully',
+      message: "Repository created successfully",
       repository,
     });
   } catch (error) {
@@ -97,10 +97,10 @@ router.post('/', authenticateJwt, async (req: AuthRequest, res, next) => {
  * @desc Get all repositories (paginated)
  * @access Private
  */
-router.get('/', authenticateJwt, async (req: AuthRequest, res, next) => {
+router.get("/", authenticateJwt, async (req: AuthRequest, res, next) => {
   try {
     if (!req.user) {
-      throw new ApiError(401, 'User not authenticated');
+      throw new ApiError(401, "User not authenticated");
     }
 
     const page = Number(req.query.page) || 1;
@@ -135,7 +135,7 @@ router.get('/', authenticateJwt, async (req: AuthRequest, res, next) => {
       skip,
       take: limit,
       orderBy: {
-        createdAt: 'desc',
+        createdAt: "desc",
       },
     });
 
@@ -162,10 +162,10 @@ router.get('/', authenticateJwt, async (req: AuthRequest, res, next) => {
  * @desc Get repository by ID
  * @access Private
  */
-router.get('/:id', authenticateJwt, async (req: AuthRequest, res, next) => {
+router.get("/:id", authenticateJwt, async (req: AuthRequest, res, next) => {
   try {
     if (!req.user) {
-      throw new ApiError(401, 'User not authenticated');
+      throw new ApiError(401, "User not authenticated");
     }
 
     const repositoryId = req.params.id;
@@ -202,7 +202,7 @@ router.get('/:id', authenticateJwt, async (req: AuthRequest, res, next) => {
         },
         accessRequests: {
           where: {
-            status: 'PENDING',
+            status: "PENDING",
           },
           include: {
             requester: {
@@ -215,26 +215,42 @@ router.get('/:id', authenticateJwt, async (req: AuthRequest, res, next) => {
             },
           },
           orderBy: {
-            createdAt: 'desc',
+            createdAt: "desc",
           },
         },
       },
     });
 
     if (!repository) {
-      throw new ApiError(404, 'Repository not found');
+      throw new ApiError(404, "Repository not found");
     }
 
     // Check permission with Permit.io
     const hasViewPermission = await checkPermission(
       req.user.id,
-      'view',
-      'repository',
+      "view",
+      "repository",
       repositoryId
     );
 
-    if (!hasViewPermission && repository.ownerId !== req.user.id) {
-      throw new ApiError(403, 'You do not have permission to view this repository');
+    // Check role assignments directly in database as a fallback
+    const hasRoleAssignment = await prisma.roleAssignment.findFirst({
+      where: {
+        userId: req.user.id,
+        repositoryId: repositoryId,
+      },
+    });
+
+    // Allow if user is the owner, has a permit permission, or has a direct role assignment
+    if (
+      !hasViewPermission &&
+      repository.ownerId !== req.user.id &&
+      !hasRoleAssignment
+    ) {
+      throw new ApiError(
+        403,
+        "You don't have permission to view this repository"
+      );
     }
 
     res.status(200).json({ repository });
@@ -248,10 +264,10 @@ router.get('/:id', authenticateJwt, async (req: AuthRequest, res, next) => {
  * @desc Update repository
  * @access Private
  */
-router.put('/:id', authenticateJwt, async (req: AuthRequest, res, next) => {
+router.put("/:id", authenticateJwt, async (req: AuthRequest, res, next) => {
   try {
     if (!req.user) {
-      throw new ApiError(401, 'User not authenticated');
+      throw new ApiError(401, "User not authenticated");
     }
 
     const repositoryId = req.params.id;
@@ -263,19 +279,22 @@ router.put('/:id', authenticateJwt, async (req: AuthRequest, res, next) => {
     });
 
     if (!repository) {
-      throw new ApiError(404, 'Repository not found');
+      throw new ApiError(404, "Repository not found");
     }
 
     // Check permission with Permit.io
     const hasAdminPermission = await checkPermission(
       req.user.id,
-      'admin',
-      'repository',
+      "admin",
+      "repository",
       repositoryId
     );
 
     if (!hasAdminPermission && repository.ownerId !== req.user.id) {
-      throw new ApiError(403, 'You do not have permission to update this repository');
+      throw new ApiError(
+        403,
+        "You do not have permission to update this repository"
+      );
     }
 
     // Update repository
@@ -287,18 +306,18 @@ router.put('/:id', authenticateJwt, async (req: AuthRequest, res, next) => {
     // Create audit log entry
     await prisma.auditLog.create({
       data: {
-        action: 'REPOSITORY_UPDATED',
-        entityType: 'repository',
+        action: "REPOSITORY_UPDATED",
+        entityType: "repository",
         entityId: updatedRepository.id,
         description: `Repository "${updatedRepository.name}" updated`,
         userId: req.user.id,
         ipAddress: req.ip,
-        userAgent: req.headers['user-agent'] || '',
+        userAgent: req.headers["user-agent"] || "",
       },
     });
 
     res.status(200).json({
-      message: 'Repository updated successfully',
+      message: "Repository updated successfully",
       repository: updatedRepository,
     });
   } catch (error) {
@@ -311,10 +330,10 @@ router.put('/:id', authenticateJwt, async (req: AuthRequest, res, next) => {
  * @desc Delete repository
  * @access Private
  */
-router.delete('/:id', authenticateJwt, async (req: AuthRequest, res, next) => {
+router.delete("/:id", authenticateJwt, async (req: AuthRequest, res, next) => {
   try {
     if (!req.user) {
-      throw new ApiError(401, 'User not authenticated');
+      throw new ApiError(401, "User not authenticated");
     }
 
     const repositoryId = req.params.id;
@@ -325,19 +344,22 @@ router.delete('/:id', authenticateJwt, async (req: AuthRequest, res, next) => {
     });
 
     if (!repository) {
-      throw new ApiError(404, 'Repository not found');
+      throw new ApiError(404, "Repository not found");
     }
 
     // Check permission with Permit.io
     const hasDeletePermission = await checkPermission(
       req.user.id,
-      'delete',
-      'repository',
+      "delete",
+      "repository",
       repositoryId
     );
 
     if (!hasDeletePermission && repository.ownerId !== req.user.id) {
-      throw new ApiError(403, 'You do not have permission to delete this repository');
+      throw new ApiError(
+        403,
+        "You do not have permission to delete this repository"
+      );
     }
 
     // Delete repository
@@ -348,18 +370,18 @@ router.delete('/:id', authenticateJwt, async (req: AuthRequest, res, next) => {
     // Create audit log entry
     await prisma.auditLog.create({
       data: {
-        action: 'REPOSITORY_DELEPTED',
-        entityType: 'repository',
+        action: "REPOSITORY_DELEPTED",
+        entityType: "repository",
         entityId: repositoryId,
         description: `Repository "${repository.name}" deleted`,
         userId: req.user.id,
         ipAddress: req.ip,
-        userAgent: req.headers['user-agent'] || '',
+        userAgent: req.headers["user-agent"] || "",
       },
     });
 
     res.status(200).json({
-      message: 'Repository deleted successfully',
+      message: "Repository deleted successfully",
     });
   } catch (error) {
     next(error);
@@ -371,60 +393,116 @@ router.delete('/:id', authenticateJwt, async (req: AuthRequest, res, next) => {
  * @desc Get role assignments for a repository
  * @access Private
  */
-router.get('/:id/role-assignments', authenticateJwt, async (req: AuthRequest, res, next) => {
-  try {
-    if (!req.user) {
-      throw new ApiError(401, 'User not authenticated');
+router.get(
+  "/:id/role-assignments",
+  authenticateJwt,
+  async (req: AuthRequest, res, next) => {
+    try {
+      if (!req.user) {
+        throw new ApiError(401, "User not authenticated");
+      }
+
+      const repositoryId = req.params.id;
+
+      // Check if repository exists
+      const repository = await prisma.repository.findUnique({
+        where: { id: repositoryId },
+      });
+
+      if (!repository) {
+        throw new ApiError(404, "Repository not found");
+      }
+
+      // Check permission with Permit.io
+      const hasViewPermission = await checkPermission(
+        req.user.id,
+        "view",
+        "repository",
+        repositoryId
+      );
+
+      if (!hasViewPermission && repository.ownerId !== req.user.id) {
+        throw new ApiError(
+          403,
+          "You do not have permission to view this repository"
+        );
+      }
+
+      // Get role assignments
+      const roleAssignments = await prisma.roleAssignment.findMany({
+        where: {
+          repositoryId,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
+          role: true,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+      res.status(200).json({ roleAssignments });
+    } catch (error) {
+      next(error);
     }
+  }
+);
 
-    const repositoryId = req.params.id;
+/**
+ * @route GET /api/repositories/:id/roles
+ * @desc Get all roles available for a repository
+ * @access Private
+ */
+router.get(
+  "/:id/roles",
+  authenticateJwt,
+  async (req: AuthRequest, res, next) => {
+    try {
+      if (!req.user) {
+        throw new ApiError(401, "User not authenticated");
+      }
 
-    // Check if repository exists
-    const repository = await prisma.repository.findUnique({
-      where: { id: repositoryId },
-    });
+      const repositoryId = req.params.id;
 
-    if (!repository) {
-      throw new ApiError(404, 'Repository not found');
-    }
-
-    // Check permission with Permit.io
-    const hasViewPermission = await checkPermission(
-      req.user.id,
-      'view',
-      'repository',
-      repositoryId
-    );
-
-    if (!hasViewPermission && repository.ownerId !== req.user.id) {
-      throw new ApiError(403, 'You do not have permission to view this repository');
-    }
-
-    // Get role assignments
-    const roleAssignments = await prisma.roleAssignment.findMany({
-      where: {
-        repositoryId,
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
+      // Check if repository exists
+      const repository = await prisma.repository.findUnique({
+        where: { id: repositoryId },
+        include: {
+          organization: {
+            select: {
+              id: true,
+            },
           },
         },
-        role: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+      });
 
-    res.status(200).json({ roleAssignments });
-  } catch (error) {
-    next(error);
+      if (!repository) {
+        throw new ApiError(404, "Repository not found");
+      }
+
+      // Get roles for the repository's organization
+      const roles = await prisma.role.findMany({
+        where: {
+          organizationId: repository.organization.id,
+        },
+        orderBy: {
+          name: "asc",
+        },
+      });
+
+      res.status(200).json({ roles });
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 export { router as repositoryRouter };

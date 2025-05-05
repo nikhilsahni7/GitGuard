@@ -1,9 +1,10 @@
-import express from 'express';
-import { z } from 'zod';
-import { prisma } from '../index';
-import { type AuthRequest, authenticateJwt } from '../middleware/auth';
-import { ApiError } from '../middleware/errorHandler';
-import { syncUserWithPermit } from '../utils/permitUtils';
+import express from "express";
+import { z } from "zod";
+import { prisma } from "../index";
+import { type AuthRequest, authenticateJwt } from "../middleware/auth";
+import { ApiError } from "../middleware/errorHandler";
+import { sendPushNotification } from "../utils/notificationUtils";
+import { syncUserWithPermit } from "../utils/permitUtils";
 
 const router = express.Router();
 
@@ -19,10 +20,10 @@ const updateProfileSchema = z.object({
  * @desc Get current user profile
  * @access Private
  */
-router.get('/me', authenticateJwt, async (req: AuthRequest, res, next) => {
+router.get("/me", authenticateJwt, async (req: AuthRequest, res, next) => {
   try {
     if (!req.user) {
-      throw new ApiError(401, 'User not authenticated');
+      throw new ApiError(401, "User not authenticated");
     }
 
     const user = await prisma.user.findUnique({
@@ -40,7 +41,7 @@ router.get('/me', authenticateJwt, async (req: AuthRequest, res, next) => {
     });
 
     if (!user) {
-      throw new ApiError(404, 'User not found');
+      throw new ApiError(404, "User not found");
     }
 
     res.status(200).json({ user });
@@ -54,10 +55,10 @@ router.get('/me', authenticateJwt, async (req: AuthRequest, res, next) => {
  * @desc Update current user profile
  * @access Private
  */
-router.put('/me', authenticateJwt, async (req: AuthRequest, res, next) => {
+router.put("/me", authenticateJwt, async (req: AuthRequest, res, next) => {
   try {
     if (!req.user) {
-      throw new ApiError(401, 'User not authenticated');
+      throw new ApiError(401, "User not authenticated");
     }
 
     const validatedData = updateProfileSchema.parse(req.body);
@@ -83,18 +84,18 @@ router.put('/me', authenticateJwt, async (req: AuthRequest, res, next) => {
     // Create audit log entry for profile update
     await prisma.auditLog.create({
       data: {
-        action: 'PROFILE_UPDATED',
-        entityType: 'user',
+        action: "PROFILE_UPDATED",
+        entityType: "user",
         entityId: updatedUser.id,
-        description: 'User profile updated',
+        description: "User profile updated",
         userId: updatedUser.id,
         ipAddress: req.ip,
-        userAgent: req.headers['user-agent'] || '',
+        userAgent: req.headers["user-agent"] || "",
       },
     });
 
     res.status(200).json({
-      message: 'Profile updated successfully',
+      message: "Profile updated successfully",
       user: updatedUser,
     });
   } catch (error) {
@@ -107,53 +108,57 @@ router.put('/me', authenticateJwt, async (req: AuthRequest, res, next) => {
  * @desc Update user's push notification token
  * @access Private
  */
-router.put('/push-token', authenticateJwt, async (req: AuthRequest, res, next) => {
-  try {
-    if (!req.user) {
-      throw new ApiError(401, 'User not authenticated');
+router.put(
+  "/push-token",
+  authenticateJwt,
+  async (req: AuthRequest, res, next) => {
+    try {
+      if (!req.user) {
+        throw new ApiError(401, "User not authenticated");
+      }
+
+      const { pushToken } = req.body;
+
+      if (!pushToken) {
+        throw new ApiError(400, "Push token is required");
+      }
+
+      await prisma.user.update({
+        where: { id: req.user.id },
+        data: { pushToken },
+      });
+
+      // Create audit log entry for push token update
+      await prisma.auditLog.create({
+        data: {
+          action: "PUSH_TOKEN_UPDATED",
+          entityType: "user",
+          entityId: req.user.id,
+          description: "Push notification token updated",
+          userId: req.user.id,
+          ipAddress: req.ip,
+          userAgent: req.headers["user-agent"] || "",
+        },
+      });
+
+      res.status(200).json({
+        message: "Push notification token updated successfully",
+      });
+    } catch (error) {
+      next(error);
     }
-
-    const { pushToken } = req.body;
-
-    if (!pushToken) {
-      throw new ApiError(400, 'Push token is required');
-    }
-
-    await prisma.user.update({
-      where: { id: req.user.id },
-      data: { pushToken },
-    });
-
-    // Create audit log entry for push token update
-    await prisma.auditLog.create({
-      data: {
-        action: 'PUSH_TOKEN_UPDATED',
-        entityType: 'user',
-        entityId: req.user.id,
-        description: 'Push notification token updated',
-        userId: req.user.id,
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent'] || '',
-      },
-    });
-
-    res.status(200).json({
-      message: 'Push notification token updated successfully',
-    });
-  } catch (error) {
-    next(error);
   }
-});
+);
 
 /**
  * @route GET /api/users/:id
  * @desc Get user by ID (for admins)
  * @access Private
  */
-router.get('/:id', authenticateJwt, async (req: AuthRequest, res, next) => {
+router.get("/:id", authenticateJwt, async (req: AuthRequest, res, next) => {
   try {
     if (!req.user) {
-      throw new ApiError(401, 'User not authenticated');
+      throw new ApiError(401, "User not authenticated");
     }
 
     const userId = req.params.id;
@@ -172,7 +177,7 @@ router.get('/:id', authenticateJwt, async (req: AuthRequest, res, next) => {
     });
 
     if (!user) {
-      throw new ApiError(404, 'User not found');
+      throw new ApiError(404, "User not found");
     }
 
     res.status(200).json({ user });
@@ -186,10 +191,10 @@ router.get('/:id', authenticateJwt, async (req: AuthRequest, res, next) => {
  * @desc Get all users (paginated)
  * @access Private
  */
-router.get('/', authenticateJwt, async (req: AuthRequest, res, next) => {
+router.get("/", authenticateJwt, async (req: AuthRequest, res, next) => {
   try {
     if (!req.user) {
-      throw new ApiError(401, 'User not authenticated');
+      throw new ApiError(401, "User not authenticated");
     }
 
     const page = Number(req.query.page) || 1;
@@ -209,7 +214,7 @@ router.get('/', authenticateJwt, async (req: AuthRequest, res, next) => {
       skip,
       take: limit,
       orderBy: {
-        createdAt: 'desc',
+        createdAt: "desc",
       },
     });
 
@@ -228,5 +233,36 @@ router.get('/', authenticateJwt, async (req: AuthRequest, res, next) => {
     next(error);
   }
 });
+
+/**
+ * @route POST /api/users/test-notification
+ * @desc Send a test push notification to the current user
+ * @access Private
+ */
+router.post(
+  "/test-notification",
+  authenticateJwt,
+  async (req: AuthRequest, res, next) => {
+    try {
+      if (!req.user) {
+        throw new ApiError(401, "User not authenticated");
+      }
+
+      const {
+        title = "Test Notification",
+        body = "This is a test notification from GitGuard",
+        data = {},
+      } = req.body;
+
+      await sendPushNotification(req.user.id, title, body, data);
+
+      res.status(200).json({
+        message: "Test notification sent successfully",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 export { router as userRouter };

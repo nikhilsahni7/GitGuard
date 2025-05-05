@@ -1,101 +1,130 @@
-import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcrypt';
-import { initializePermit } from '../src/utils/permitUtils';
+import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcrypt";
+import { execSync } from "child_process";
+import { initializePermit } from "../src/utils/permitUtils";
 
 const prisma = new PrismaClient();
 
+// Check if this is being run as a direct script or through prisma seed
+const isDirectExecution = process.argv[1].includes("seed.ts");
+
+async function resetDatabase() {
+  console.log("🔄 Resetting database...");
+
+  try {
+    // Only run the migrate reset command if this is being run directly
+    // This prevents the infinite loop when prisma calls the seed script
+    if (isDirectExecution) {
+      // Use --skip-seed flag to prevent triggering seed again in migrate reset
+      execSync("npx prisma migrate reset --force --skip-seed", {
+        stdio: "inherit",
+      });
+      console.log("✅ Database reset successfully");
+    } else {
+      console.log(
+        "⏩ Skipping database reset as this is being run as part of prisma seed"
+      );
+    }
+  } catch (error) {
+    console.error("❌ Failed to reset database:", error);
+    throw error;
+  }
+}
+
 async function seed() {
   try {
-    console.log('🌱 Starting seed process...');
+    console.log("🌱 Starting seed process...");
 
     // Initialize Permit.io with default resources and roles
     try {
       await initializePermit();
-      console.log('✅ Initialized Permit.io with default resources and roles');
+      console.log("✅ Initialized Permit.io with default resources and roles");
     } catch (error: any) {
       // If the error is about duplicate resources (409 status code), we can continue
-      if (error.message && error.message.includes('already exists')) {
-        console.log('✅ Permit.io resources already exist, continuing with seed process');
+      if (error.message && error.message.includes("already exists")) {
+        console.log(
+          "✅ Permit.io resources already exist, continuing with seed process"
+        );
       } else {
-        console.error('Failed to initialize Permit.io:', error);
+        console.error("Failed to initialize Permit.io:", error);
       }
     }
 
     // Create admin user
-    const adminPassword = await bcrypt.hash('2025DEVChallenge', 10);
+    const adminPassword = await bcrypt.hash("2025DEVChallenge", 10);
     const admin = await prisma.user.upsert({
-      where: { email: 'admin@gitguard.dev' },
+      where: { email: "admin@gitguard.dev" },
       update: {},
       create: {
-        email: 'admin@gitguard.dev',
-        firstName: 'Admin',
-        lastName: 'User',
+        email: "admin@gitguard.dev",
+        firstName: "Admin",
+        lastName: "User",
         password: adminPassword,
         biometricEnabled: false,
       },
     });
-    console.log('✅ Created admin user');
+    console.log("✅ Created admin user");
 
     // Create regular user
-    const userPassword = await bcrypt.hash('2025DEVChallenge', 10);
+    const userPassword = await bcrypt.hash("2025DEVChallenge", 10);
     const user = await prisma.user.upsert({
-      where: { email: 'newuser@gitguard.dev' },
+      where: { email: "newuser@gitguard.dev" },
       update: {},
       create: {
-        email: 'newuser@gitguard.dev',
-        firstName: 'New',
-        lastName: 'User',
+        email: "newuser@gitguard.dev",
+        firstName: "New",
+        lastName: "User",
         password: userPassword,
         biometricEnabled: false,
       },
     });
-    console.log('✅ Created regular user');
+    console.log("✅ Created regular user");
 
     // Create organization
     const organization = await prisma.organization.upsert({
-      where: { id: '00000000-0000-0000-0000-000000000001' },
+      where: { id: "00000000-0000-0000-0000-000000000001" },
       update: {},
       create: {
-        id: '00000000-0000-0000-0000-000000000001',
-        name: 'GitGuard Development Team',
+        id: "00000000-0000-0000-0000-000000000001",
+        name: "GitGuard Development Team",
       },
     });
-    console.log('✅ Created organization');
+    console.log("✅ Created organization");
 
     // Create roles
     const viewerRole = await prisma.role.upsert({
-      where: { id: '00000000-0000-0000-0000-000000000001' },
+      where: { id: "00000000-0000-0000-0000-000000000001" },
       update: {},
       create: {
-        id: '00000000-0000-0000-0000-000000000001',
-        name: 'Viewer',
-        description: 'Can view repository contents',
+        id: "00000000-0000-0000-0000-000000000001",
+        name: "Viewer",
+        description: "Can view repository contents",
         organizationId: organization.id,
       },
     });
 
     const contributorRole = await prisma.role.upsert({
-      where: { id: '00000000-0000-0000-0000-000000000002' },
+      where: { id: "00000000-0000-0000-0000-000000000002" },
       update: {},
       create: {
-        id: '00000000-0000-0000-0000-000000000002',
-        name: 'Contributor',
-        description: 'Can view and push changes to repository',
+        id: "00000000-0000-0000-0000-000000000002",
+        name: "Contributor",
+        description: "Can view and push changes to repository",
         organizationId: organization.id,
       },
     });
 
     const adminRole = await prisma.role.upsert({
-      where: { id: '00000000-0000-0000-0000-000000000003' },
+      where: { id: "00000000-0000-0000-0000-000000000003" },
       update: {},
       create: {
-        id: '00000000-0000-0000-0000-000000000003',
-        name: 'Administrator',
-        description: 'Full repository access and management',
+        id: "00000000-0000-0000-0000-000000000003",
+        name: "Administrator",
+        description: "Full repository access and management",
         organizationId: organization.id,
       },
     });
-    console.log('✅ Created roles');
+    console.log("✅ Created roles");
 
     // Create permissions for roles
     await prisma.permission.deleteMany({
@@ -110,7 +139,7 @@ async function seed() {
     await prisma.permission.create({
       data: {
         roleId: viewerRole.id,
-        action: 'view',
+        action: "view",
       },
     });
 
@@ -119,15 +148,15 @@ async function seed() {
       data: [
         {
           roleId: contributorRole.id,
-          action: 'view',
+          action: "view",
         },
         {
           roleId: contributorRole.id,
-          action: 'clone',
+          action: "clone",
         },
         {
           roleId: contributorRole.id,
-          action: 'push',
+          action: "push",
         },
       ],
     });
@@ -137,38 +166,38 @@ async function seed() {
       data: [
         {
           roleId: adminRole.id,
-          action: 'view',
+          action: "view",
         },
         {
           roleId: adminRole.id,
-          action: 'clone',
+          action: "clone",
         },
         {
           roleId: adminRole.id,
-          action: 'push',
+          action: "push",
         },
         {
           roleId: adminRole.id,
-          action: 'admin',
+          action: "admin",
         },
         {
           roleId: adminRole.id,
-          action: 'delete',
+          action: "delete",
         },
       ],
     });
-    console.log('✅ Created permissions');
+    console.log("✅ Created permissions");
 
     // Create sample repository
     const repository = await prisma.repository.upsert({
-      where: { id: '00000000-0000-0000-0000-000000000001' },
+      where: { id: "00000000-0000-0000-0000-000000000001" },
       update: {},
       create: {
-        id: '00000000-0000-0000-0000-000000000001',
-        name: 'GitGuard Backend',
-        description: 'Backend repository for GitGuard project',
-        gitProvider: 'GITHUB',
-        gitRepoUrl: 'https://github.com/gitguard/backend',
+        id: "00000000-0000-0000-0000-000000000001",
+        name: "GitGuard Backend",
+        description: "Backend repository for GitGuard project",
+        gitProvider: "GITHUB",
+        gitRepoUrl: "https://github.com/gitguard/backend",
         organizationId: organization.id,
         ownerId: admin.id,
       },
@@ -176,121 +205,144 @@ async function seed() {
 
     // Create a second repository referencing taxiapp-backend
     const taxiRepository = await prisma.repository.upsert({
-      where: { id: '00000000-0000-0000-0000-000000000002' },
+      where: { id: "00000000-0000-0000-0000-000000000002" },
       update: {},
       create: {
-        id: '00000000-0000-0000-0000-000000000002',
-        name: 'Taxiapp Backend',
-        description: 'Backend service for taxi booking application',
-        gitProvider: 'GITHUB',
-        gitRepoUrl: 'https://github.com/nikhilsahni7/taxiapp-backend',
+        id: "00000000-0000-0000-0000-000000000002",
+        name: "Taxiapp Backend",
+        description: "Backend service for taxi booking application",
+        gitProvider: "GITHUB",
+        gitRepoUrl: "https://github.com/nikhilsahni7/taxiapp-backend",
         organizationId: organization.id,
         ownerId: admin.id,
       },
     });
-    console.log('✅ Created sample repositories');
+    console.log("✅ Created sample repositories");
 
     // Assign admin role to admin user
     await prisma.roleAssignment.upsert({
-      where: { id: '00000000-0000-0000-0000-000000000001' },
+      where: { id: "00000000-0000-0000-0000-000000000001" },
       update: {},
       create: {
-        id: '00000000-0000-0000-0000-000000000001',
+        id: "00000000-0000-0000-0000-000000000001",
         userId: admin.id,
         roleId: adminRole.id,
         repositoryId: repository.id,
       },
     });
 
-    // Assign viewer role to regular user for taxiapp repository
+    // Also assign admin role to admin user for taxiapp repository
     await prisma.roleAssignment.upsert({
-      where: { id: '00000000-0000-0000-0000-000000000002' },
+      where: { id: "00000000-0000-0000-0000-000000000003" },
       update: {},
       create: {
-        id: '00000000-0000-0000-0000-000000000002',
+        id: "00000000-0000-0000-0000-000000000003",
+        userId: admin.id,
+        roleId: adminRole.id,
+        repositoryId: taxiRepository.id,
+      },
+    });
+
+    // Assign viewer role to regular user for taxiapp repository
+    await prisma.roleAssignment.upsert({
+      where: { id: "00000000-0000-0000-0000-000000000002" },
+      update: {},
+      create: {
+        id: "00000000-0000-0000-0000-000000000002",
         userId: user.id,
         roleId: viewerRole.id,
         repositoryId: taxiRepository.id,
       },
     });
 
-    console.log('✅ Assigned roles to users');
+    console.log("✅ Assigned roles to users");
 
     // Create sample audit logs
     await prisma.auditLog.createMany({
       data: [
         {
-          action: 'USER_CREATED',
-          entityType: 'user',
+          action: "USER_CREATED",
+          entityType: "user",
           entityId: admin.id,
-          description: 'Admin user account created',
+          description: "Admin user account created",
           userId: admin.id,
         },
         {
-          action: 'USER_CREATED',
-          entityType: 'user',
+          action: "USER_CREATED",
+          entityType: "user",
           entityId: user.id,
-          description: 'Regular user account created',
+          description: "Regular user account created",
           userId: admin.id,
         },
         {
-          action: 'REPOSITORY_CREATED',
-          entityType: 'repository',
+          action: "REPOSITORY_CREATED",
+          entityType: "repository",
           entityId: repository.id,
           description: 'Repository "GitGuard Backend" created',
           userId: admin.id,
         },
         {
-          action: 'REPOSITORY_CREATED',
-          entityType: 'repository',
+          action: "REPOSITORY_CREATED",
+          entityType: "repository",
           entityId: taxiRepository.id,
           description: 'Repository "Taxiapp Backend" created',
           userId: admin.id,
         },
         {
-          action: 'ROLE_ASSIGNED',
-          entityType: 'role_assignment',
-          entityId: '00000000-0000-0000-0000-000000000001',
-          description: 'Admin role assigned to admin user for GitGuard Backend repository',
+          action: "ROLE_ASSIGNED",
+          entityType: "role_assignment",
+          entityId: "00000000-0000-0000-0000-000000000001",
+          description:
+            "Admin role assigned to admin user for GitGuard Backend repository",
           userId: admin.id,
         },
       ],
     });
-    console.log('✅ Created sample audit logs');
+    console.log("✅ Created sample audit logs");
 
-    // Create a sample access request
+    // Create a sample access request from regular user to admin
     await prisma.accessRequest.upsert({
-      where: { id: '00000000-0000-0000-0000-000000000001' },
+      where: { id: "00000000-0000-0000-0000-000000000001" },
       update: {},
       create: {
-        id: '00000000-0000-0000-0000-000000000001',
+        id: "00000000-0000-0000-0000-000000000001",
         requesterId: user.id,
         repositoryId: taxiRepository.id,
         roleId: contributorRole.id,
-        reason: 'I need to contribute code to fix the payment processing bug',
-        status: 'PENDING',
+        reason: "I need to contribute code to fix the payment processing bug",
+        status: "PENDING",
         requiresMultiApproval: false,
-        approverIds: [],
+        approverIds: [admin.id],
         requestedActions: [],
+        approvalCount: 0,
       },
     });
-    console.log('✅ Created sample access request');
+    console.log("✅ Created sample access request");
 
-    console.log('✅ Seed completed successfully');
+    console.log("✅ Seed completed successfully");
   } catch (error) {
-    console.error('❌ Seed failed:', error);
+    console.error("❌ Seed failed:", error);
     process.exit(1);
   } finally {
     await prisma.$disconnect();
   }
 }
 
-seed()
-  .then(() => {
-    console.log('🎉 Database seeded successfully');
+// Main execution
+(async () => {
+  try {
+    // First reset the database to ensure tables are created properly
+    if (isDirectExecution) {
+      await resetDatabase();
+    }
+
+    // Then seed the data
+    await seed();
+
+    console.log("🎉 Database seeded successfully");
     process.exit(0);
-  })
-  .catch((error) => {
-    console.error('❌ Database seed failed:', error);
+  } catch (error) {
+    console.error("❌ Database reset and seed failed:", error);
     process.exit(1);
-  });
+  }
+})();

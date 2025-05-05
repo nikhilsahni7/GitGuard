@@ -1,51 +1,51 @@
 {
   "name": "backend",
-  "module": "index.ts",
+  "version": "1.0.0",
+  "description": "Backend API for GitGuard",
+  "main": "src/index.ts",
   "type": "module",
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
     "build": "bun build src/index.ts --target=node --outdir=dist",
+    "test": "bun test",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:push": "prisma db push",
-    "db:studio": "prisma studio",
-    "db:seed": "bun seed.ts",
+    "db:seed": "prisma db seed",
+    "reset-seed": "npx prisma migrate reset --force --skip-seed && bun prisma/seed.ts",
+    "postinstall": "prisma generate",
     "permit:setup": "bun setup-permit.ts",
     "permit:verify": "bun verify-permit.ts",
     "permit:pdp": "docker run -d --name permit-pdp -p 7766:7000 -e PDP_API_KEY=${PERMIT_API_KEY} -e PDP_DEBUG=true permitio/pdp-v2:latest",
-    "permit:test": "bun test-permit.ts",
-    "test": "bun test"
-  },
-  "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5.0.0"
+    "permit:test": "bun test-permit.ts"
   },
   "dependencies": {
-"@prisma/client": "^5.0.0",
-
-    "@types/bcrypt": "^5.0.2",
-    "@types/cors": "^2.8.17",
-    "@types/dotenv": "^8.2.3",
-    "@types/express": "^5.0.1",
-    "@types/jsonwebtoken": "^9.0.9",
-    "@types/morgan": "^1.9.9",
-    "@types/uuid": "^9.0.8",
-    "axios": "^1.9.0",
+    "@permitio/permit-node": "^3.0.1",
+    "@prisma/client": "^5.10.2",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
-    "dotenv": "^16.5.0",
-    "expo-server-sdk": "3.7.0",
-    "express": "^5.1.0",
-    "helmet": "^8.1.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.2",
+    "express-validator": "^7.0.1",
+    "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
-    "permitio": "^2.7.4",
-    "prisma": "^5.0.0",
-    "resend": "^4.5.0",
-    "uuid": "^11.1.0",
-    "zod": "^3.24.3"
+    "permitio": "^1.0.12",
+    "uuid": "^9.0.1",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/morgan": "^1.9.9",
+    "@types/node": "^20.11.19",
+    "@types/uuid": "^9.0.8",
+    "prisma": "^5.10.2",
+    "typescript": "^5.3.3"
+  },
+  "prisma": {
+    "seed": "bun prisma/seed.ts"
   }
 }

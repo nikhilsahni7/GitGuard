@@ -177,16 +177,19 @@ The system supports both public and private GitHub repositories:
 ## Application Flow
 
 1. **Authentication Flow**:
+
    - User signs up or logs in
    - JWT token is issued for authentication
    - Biometric setup can be enabled for elevated security
 
 2. **Repository Management Flow**:
+
    - Admin creates organizations and repositories
    - Basic roles (Viewer, Contributor, Admin) are assigned
    - Custom roles can be created with specific permissions
 
 3. **Access Request Flow**:
+
    - User requests access to a repository with a specific role
    - Admin receives push notification
    - Admin verifies with biometric authentication (fingerprint/face ID)
@@ -228,3 +231,33 @@ Common issues:
 - Database connection errors: Check your DATABASE_URL in .env
 - JWT errors: Ensure JWT_SECRET is set correctly
 - Permit.io errors: Verify your API key and PDP URL
+
+## Database Setup
+
+The project uses PostgreSQL with Prisma as the ORM. Follow these steps to set up the database:
+
+1. Ensure you have PostgreSQL installed and running
+2. Create a database named `gitguard-backend` (or update the .env file accordingly)
+3. Create the tables and seed the database:
+
+```bash
+# Option 1: Regular migrations and seeding
+npm run db:migrate
+npm run db:seed
+
+# Option 2: Reset database and seed (recommended for clean setup)
+npm run reset-seed
+```
+
+This will:
+
+1. Reset your database (drop all tables and recreate them from migrations)
+2. Create all necessary tables
+3. Populate them with sample data including:
+   - Admin user: admin@gitguard.dev (password: 2025DEVChallenge)
+   - Regular user: newuser@gitguard.dev (password: 2025DEVChallenge)
+   - Sample repositories and access requests
+   - Role assignments and permissions
+   - A pending access request for testing the approval flow
+
+After running the seed, you can log in as admin@gitguard.dev to see and approve pending access requests.

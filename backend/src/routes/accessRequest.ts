@@ -1,20 +1,17 @@
-import express from 'express';
-import { z } from 'zod';
-import { prisma } from '../index';
-import { authenticateJwt, type AuthRequest } from '../middleware/auth';
-import { ApiError } from '../middleware/errorHandler';
-import { validateBiometricApproval } from '../utils/biometricUtils';
+import express from "express";
+import { z } from "zod";
+import { prisma } from "../index";
+import { authenticateJwt, type AuthRequest } from "../middleware/auth";
+import { ApiError } from "../middleware/errorHandler";
+import { validateBiometricApproval } from "../utils/biometricUtils";
 import {
   sendAccessApprovedNotification,
   sendAccessRejectedNotification,
-  sendApprovalRequestNotification
-} from '../utils/notificationUtils';
-import {
-  assignRoleInPermit
-} from '../utils/permitUtils';
+  sendApprovalRequestNotification,
+} from "../utils/notificationUtils";
+import { assignRoleInPermit } from "../utils/permitUtils";
 
 const router = express.Router();
-
 
 const createRequestSchema = z.object({
   repositoryId: z.string().uuid(),
@@ -26,9 +23,12 @@ const createRequestSchema = z.object({
   approverIds: z.array(z.string().uuid()).optional(),
 });
 
-
 const approveRequestSchema = z.object({
   biometricToken: z.string(),
+});
+
+const rejectRequestSchema = z.object({
+  reason: z.string().min(1).optional(),
 });
 
 /**
@@ -36,10 +36,10 @@ const approveRequestSchema = z.object({
  * @desc Create a new access request
  * @access Private
  */
-router.post('/', authenticateJwt, async (req: AuthRequest, res, next) => {
+router.post("/", authenticateJwt, async (req: AuthRequest, res, next) => {
   try {
     if (!req.user) {
-      throw new ApiError(401, 'User not authenticated');
+      throw new ApiError(401, "User not authenticated");
     }
 
     const validatedData = createRequestSchema.parse(req.body);
@@ -55,7 +55,7 @@ router.post('/', authenticateJwt, async (req: AuthRequest, res, next) => {
     });
 
     if (!repository) {
-      throw new ApiError(404, 'Repository not found');
+      throw new ApiError(404, "Repository not found");
     }
 
     // Check if role exists (if provided)
@@ -65,10 +65,16 @@ router.post('/', authenticateJwt, async (req: AuthRequest, res, next) => {
       });
 
       if (!role) {
-        throw new ApiError(404, 'Role not found');
+        throw new ApiError(404, "Role not found");
       }
-    } else if (!validatedData.requestedActions || validatedData.requestedActions.length === 0) {
-      throw new ApiError(400, 'Either roleId or requestedActions must be provided');
+    } else if (
+      !validatedData.requestedActions ||
+      validatedData.requestedActions.length === 0
+    ) {
+      throw new ApiError(
+        400,
+        "Either roleId or requestedActions must be provided"
+      );
     }
 
     // Check for existing pending request
@@ -76,12 +82,15 @@ router.post('/', authenticateJwt, async (req: AuthRequest, res, next) => {
       where: {
         requesterId: req.user.id,
         repositoryId: validatedData.repositoryId,
-        status: 'PENDING',
+        status: "PENDING",
       },
     });
 
     if (existingRequest) {
-      throw new ApiError(400, 'You already have a pending access request for this repository');
+      throw new ApiError(
+        400,
+        "You already have a pending access request for this repository"
+      );
     }
 
     // Create access request
@@ -92,7 +101,9 @@ router.post('/', authenticateJwt, async (req: AuthRequest, res, next) => {
         roleId: validatedData.roleId,
         requestedActions: validatedData.requestedActions || [],
         reason: validatedData.reason,
-        expiresAt: validatedData.expiresAt ? new Date(validatedData.expiresAt) : undefined,
+        expiresAt: validatedData.expiresAt
+          ? new Date(validatedData.expiresAt)
+          : undefined,
         requiresMultiApproval: validatedData.requiresMultiApproval || false,
         approverIds: validatedData.approverIds || [],
       },
@@ -101,21 +112,27 @@ router.post('/', authenticateJwt, async (req: AuthRequest, res, next) => {
     // Create audit log entry
     await prisma.auditLog.create({
       data: {
-        action: 'ACCESS_REQUEST_CREATED',
-        entityType: 'access_request',
+        action: "ACCESS_REQUEST_CREATED",
+        entityType: "access_request",
         entityId: accessRequest.id,
         description: `Access request created for repository "${repository.name}"`,
         userId: req.user.id,
         ipAddress: req.ip,
-        userAgent: req.headers['user-agent'] || '',
+        userAgent: req.headers["user-agent"] || "",
       },
     });
 
     // Send notification to repository owner
-    await sendApprovalRequestNotification(accessRequest.id, repository.owner.id);
+    await sendApprovalRequestNotification(
+      accessRequest.id,
+      repository.owner.id
+    );
 
     // If multi-approval is required, send notifications to all approvers
-    if (accessRequest.requiresMultiApproval && accessRequest.approverIds.length > 0) {
+    if (
+      accessRequest.requiresMultiApproval &&
+      accessRequest.approverIds.length > 0
+    ) {
       for (const approverId of accessRequest.approverIds) {
         if (approverId !== repository.owner.id) {
           await sendApprovalRequestNotification(accessRequest.id, approverId);
@@ -124,7 +141,7 @@ router.post('/', authenticateJwt, async (req: AuthRequest, res, next) => {
     }
 
     res.status(201).json({
-      message: 'Access request created successfully',
+      message: "Access request created successfully",
       accessRequest,
     });
   } catch (error) {
@@ -137,17 +154,22 @@ router.post('/', authenticateJwt, async (req: AuthRequest, res, next) => {
  * @desc Get all access requests (paginated)
  * @access Private
  */
-router.get('/', authenticateJwt, async (req: AuthRequest, res, next) => {
+router.get("/", authenticateJwt, async (req: AuthRequest, res, next) => {
   try {
     if (!req.user) {
-      throw new ApiError(401, 'User not authenticated');
+      throw new ApiError(401, "User not authenticated");
     }
 
     const page = Number(req.query.page) || 1;
     const limit = Number(req.query.limit) || 10;
     const skip = (page - 1) * limit;
     const status = req.query.status as string | undefined;
-    const type = req.query.type as 'pending' | 'approved' | 'rejected' | 'all' | undefined;
+    const type = req.query.type as
+      | "pending"
+      | "approved"
+      | "rejected"
+      | "all"
+      | undefined;
 
     // Build filter conditions
     const whereConditions: any = {};
@@ -158,22 +180,37 @@ router.get('/', authenticateJwt, async (req: AuthRequest, res, next) => {
     }
 
     // Filter by type (pending/approved/rejected/all)
-    if (type === 'pending') {
-      whereConditions.status = 'PENDING';
-    } else if (type === 'approved') {
-      whereConditions.status = 'APPROVED';
-    } else if (type === 'rejected') {
-      whereConditions.status = 'REJECTED';
+    if (type === "pending") {
+      whereConditions.status = "PENDING";
+    } else if (type === "approved") {
+      whereConditions.status = "APPROVED";
+    } else if (type === "rejected") {
+      whereConditions.status = "REJECTED";
     }
 
     // Filter by role (requester or approver)
-    const role = req.query.role as 'requester' | 'approver' | undefined;
-    if (role === 'requester') {
+    const role = req.query.role as "requester" | "approver" | undefined;
+    if (role === "requester") {
       whereConditions.requesterId = req.user.id;
-    } else if (role === 'approver') {
+    } else if (role === "approver") {
+      // Fix: Include repository ownership in the approver check
+      const userRepositories = await prisma.repository.findMany({
+        where: {
+          ownerId: req.user.id,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      const repositoryIds = userRepositories.map((repo) => repo.id);
+
       whereConditions.OR = [
         { approverId: req.user.id },
         { approverIds: { has: req.user.id } },
+        {
+          AND: [{ status: "PENDING" }, { repositoryId: { in: repositoryIds } }],
+        },
       ];
     }
 
@@ -209,7 +246,7 @@ router.get('/', authenticateJwt, async (req: AuthRequest, res, next) => {
       skip,
       take: limit,
       orderBy: {
-        createdAt: 'desc',
+        createdAt: "desc",
       },
     });
 
@@ -236,10 +273,10 @@ router.get('/', authenticateJwt, async (req: AuthRequest, res, next) => {
  * @desc Get access request by ID
  * @access Private
  */
-router.get('/:id', authenticateJwt, async (req: AuthRequest, res, next) => {
+router.get("/:id", authenticateJwt, async (req: AuthRequest, res, next) => {
   try {
     if (!req.user) {
-      throw new ApiError(401, 'User not authenticated');
+      throw new ApiError(401, "User not authenticated");
     }
 
     const requestId = req.params.id;
@@ -283,7 +320,7 @@ router.get('/:id', authenticateJwt, async (req: AuthRequest, res, next) => {
     });
 
     if (!accessRequest) {
-      throw new ApiError(404, 'Access request not found');
+      throw new ApiError(404, "Access request not found");
     }
 
     // Check if user is requester, approver, or repository owner
@@ -294,7 +331,10 @@ router.get('/:id', authenticateJwt, async (req: AuthRequest, res, next) => {
       accessRequest.repository.ownerId === req.user.id;
 
     if (!isRequester && !isApprover) {
-      throw new ApiError(403, 'You do not have permission to view this access request');
+      throw new ApiError(
+        403,
+        "You do not have permission to view this access request"
+      );
     }
 
     res.status(200).json({ accessRequest });
@@ -308,111 +348,126 @@ router.get('/:id', authenticateJwt, async (req: AuthRequest, res, next) => {
  * @desc Approve an access request with biometric verification
  * @access Private
  */
-router.post('/:id/approve', authenticateJwt, async (req: AuthRequest, res, next) => {
-  try {
-    if (!req.user) {
-      throw new ApiError(401, 'User not authenticated');
-    }
+router.post(
+  "/:id/approve",
+  authenticateJwt,
+  async (req: AuthRequest, res, next) => {
+    try {
+      if (!req.user) {
+        throw new ApiError(401, "User not authenticated");
+      }
 
-    const requestId = req.params.id;
-    const validatedData = approveRequestSchema.parse(req.body);
+      const requestId = req.params.id;
+      const validatedData = approveRequestSchema.parse(req.body);
 
-    // Validate biometric token
-    const isValidBiometric = await validateBiometricApproval(
-      requestId,
-      req.user.id,
-      validatedData.biometricToken
-    );
+      // Validate biometric token
+      const isValidBiometric = await validateBiometricApproval(
+        requestId,
+        req.user.id,
+        validatedData.biometricToken
+      );
 
-    if (!isValidBiometric) {
-      throw new ApiError(401, 'Biometric verification failed');
-    }
+      if (!isValidBiometric) {
+        throw new ApiError(401, "Biometric verification failed");
+      }
 
-    // Get access request
-    const accessRequest = await prisma.accessRequest.findUnique({
-      where: { id: requestId },
-      include: {
-        repository: true,
-        requester: true,
-      },
-    });
-
-    if (!accessRequest) {
-      throw new ApiError(404, 'Access request not found');
-    }
-
-    if (accessRequest.status !== 'PENDING') {
-      throw new ApiError(400, 'This access request has already been processed');
-    }
-
-    // Check if user is authorized to approve
-    const isRepositoryOwner = accessRequest.repository.ownerId === req.user.id;
-    const isDesignatedApprover = accessRequest.approverIds.includes(req.user.id);
-
-    if (!isRepositoryOwner && !isDesignatedApprover) {
-      throw new ApiError(403, 'You are not authorized to approve this request');
-    }
-
-    // Handle multi-approval logic
-    if (accessRequest.requiresMultiApproval) {
-      // Update approval count
-      const updatedRequest = await prisma.accessRequest.update({
+      // Get access request
+      const accessRequest = await prisma.accessRequest.findUnique({
         where: { id: requestId },
-        data: {
-          approvalCount: { increment: 1 },
+        include: {
+          repository: true,
+          requester: true,
         },
       });
 
-      // Create audit log for this approval
-      await prisma.auditLog.create({
-        data: {
-          action: 'ACCESS_REQUEST_APPROVAL_STEP',
-          entityType: 'access_request',
-          entityId: accessRequest.id,
-          description: `Access request approved by ${req.user.id} (Step ${updatedRequest.approvalCount} of ${accessRequest.approverIds.length + 1})`,
-          userId: req.user.id,
-          ipAddress: req.ip,
-          userAgent: req.headers['user-agent'] || '',
-        },
-      });
+      if (!accessRequest) {
+        throw new ApiError(404, "Access request not found");
+      }
 
-    
-      if (updatedRequest.approvalCount >= accessRequest.approverIds.length + 1) {
-        // All approvals received, proceed with final approval
+      if (accessRequest.status !== "PENDING") {
+        throw new ApiError(
+          400,
+          "This access request has already been processed"
+        );
+      }
+
+      // Check if user is authorized to approve
+      const isRepositoryOwner =
+        accessRequest.repository.ownerId === req.user.id;
+      const isDesignatedApprover = accessRequest.approverIds.includes(
+        req.user.id
+      );
+
+      if (!isRepositoryOwner && !isDesignatedApprover) {
+        throw new ApiError(
+          403,
+          "You are not authorized to approve this request"
+        );
+      }
+
+      // Handle multi-approval logic
+      if (accessRequest.requiresMultiApproval) {
+        // Update approval count
+        const updatedRequest = await prisma.accessRequest.update({
+          where: { id: requestId },
+          data: {
+            approvalCount: { increment: 1 },
+          },
+        });
+
+        // Create audit log for this approval
+        await prisma.auditLog.create({
+          data: {
+            action: "ACCESS_REQUEST_APPROVAL_STEP",
+            entityType: "access_request",
+            entityId: accessRequest.id,
+            description: `Access request approved by ${req.user.id} (Step ${updatedRequest.approvalCount} of ${accessRequest.approverIds.length + 1})`,
+            userId: req.user.id,
+            ipAddress: req.ip,
+            userAgent: req.headers["user-agent"] || "",
+          },
+        });
+
+        if (
+          updatedRequest.approvalCount >=
+          accessRequest.approverIds.length + 1
+        ) {
+          // All approvals received, proceed with final approval
+          await finalizeApproval(
+            accessRequest,
+            req.user.id,
+            req.ip || "",
+            req.headers["user-agent"] || ""
+          );
+
+          res.status(200).json({
+            message: "Access request fully approved",
+          });
+        } else {
+          res.status(200).json({
+            message: `Approval recorded (${updatedRequest.approvalCount} of ${accessRequest.approverIds.length + 1})`,
+            approvalCount: updatedRequest.approvalCount,
+            requiredApprovals: accessRequest.approverIds.length + 1,
+          });
+        }
+      } else {
+        // Single approval is sufficient
         await finalizeApproval(
           accessRequest,
           req.user.id,
-          req.ip || '',
-          req.headers['user-agent'] || ''
+          req.ip || "",
+          req.headers["user-agent"] || ""
         );
 
         res.status(200).json({
-          message: 'Access request fully approved',
-        });
-      } else {
-        res.status(200).json({
-          message: `Approval recorded (${updatedRequest.approvalCount} of ${accessRequest.approverIds.length + 1})`,
-          approvalCount: updatedRequest.approvalCount,
-          requiredApprovals: accessRequest.approverIds.length + 1,
+          message: "Access request approved successfully",
         });
       }
-    } else {
-      // Single approval is sufficient
-      await finalizeApproval(
-        accessRequest,
-        req.user.id,
-        req.ip || '',
-        req.headers['user-agent'] || ''
-      );
-
-      res.status(200).json({
-        message: 'Access request approved successfully',
-      });
+    } catch (error) {
+      next(error);
     }
-  } catch (error) {
-    next(error);
   }
-});
+);
 
 /**
  * Helper function to finalize approval
@@ -427,7 +482,7 @@ const finalizeApproval = async (
   const updatedRequest = await prisma.accessRequest.update({
     where: { id: accessRequest.id },
     data: {
-      status: 'APPROVED',
+      status: "APPROVED",
       approverId,
       approvedAt: new Date(),
     },
@@ -449,7 +504,7 @@ const finalizeApproval = async (
     await assignRoleInPermit(
       accessRequest.requesterId,
       roleAssignment.roleId,
-      'repository',
+      "repository",
       accessRequest.repositoryId
     );
   }
@@ -457,8 +512,8 @@ const finalizeApproval = async (
   // Create audit log entry
   await prisma.auditLog.create({
     data: {
-      action: 'ACCESS_REQUEST_APPROVED',
-      entityType: 'access_request',
+      action: "ACCESS_REQUEST_APPROVED",
+      entityType: "access_request",
       entityId: accessRequest.id,
       description: `Access request for "${accessRequest.repository.name}" approved`,
       userId: approverId,
@@ -483,74 +538,110 @@ const finalizeApproval = async (
  * @desc Reject an access request
  * @access Private
  */
-router.post('/:id/reject', authenticateJwt, async (req: AuthRequest, res, next) => {
-  try {
-    if (!req.user) {
-      throw new ApiError(401, 'User not authenticated');
-    }
+router.post(
+  "/:id/reject",
+  authenticateJwt,
+  async (req: AuthRequest, res, next) => {
+    try {
+      if (!req.user) {
+        throw new ApiError(401, "User not authenticated");
+      }
 
-    const requestId = req.params.id;
-    const { reason } = req.body;
+      const requestId = req.params.id;
+      const validatedData = rejectRequestSchema.parse(req.body);
+      const reason = validatedData.reason;
 
-    // Get access request
-    const accessRequest = await prisma.accessRequest.findUnique({
-      where: { id: requestId },
-      include: {
-        repository: true,
-      },
-    });
-
-    if (!accessRequest) {
-      throw new ApiError(404, 'Access request not found');
-    }
-
-    if (accessRequest.status !== 'PENDING') {
-      throw new ApiError(400, 'This access request has already been processed');
-    }
-
-    // Check if user is authorized to reject
-    const isRepositoryOwner = accessRequest.repository.ownerId === req.user.id;
-    const isDesignatedApprover = accessRequest.approverIds.includes(req.user.id);
-
-    if (!isRepositoryOwner && !isDesignatedApprover) {
-      throw new ApiError(403, 'You are not authorized to reject this request');
-    }
-
-    // Update access request status
-    await prisma.accessRequest.update({
-      where: { id: requestId },
-      data: {
-        status: 'REJECTED',
-        approverId: req.user.id,
-        rejectedAt: new Date(),
-      },
-    });
-
-    // Create audit log entry
-    await prisma.auditLog.create({
-      data: {
-        action: 'ACCESS_REQUEST_REJECTED',
-        entityType: 'access_request',
-        entityId: accessRequest.id,
-        description: `Access request for "${accessRequest.repository.name}" rejected`,
-        userId: req.user.id,
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent'] || '',
-        metadata: {
-          rejectionReason: reason,
+      // Get access request
+      const accessRequest = await prisma.accessRequest.findUnique({
+        where: { id: requestId },
+        include: {
+          repository: true,
+          requester: true,
         },
-      },
-    });
+      });
 
-    // Send notification to requester
-    await sendAccessRejectedNotification(accessRequest.id);
+      if (!accessRequest) {
+        throw new ApiError(404, "Access request not found");
+      }
 
-    res.status(200).json({
-      message: 'Access request rejected successfully',
-    });
-  } catch (error) {
-    next(error);
+      if (accessRequest.status !== "PENDING") {
+        throw new ApiError(
+          400,
+          "This access request has already been processed"
+        );
+      }
+
+      // Check if user is authorized to reject
+      const isRepositoryOwner =
+        accessRequest.repository.ownerId === req.user.id;
+      const isDesignatedApprover = accessRequest.approverIds.includes(
+        req.user.id
+      );
+
+      if (!isRepositoryOwner && !isDesignatedApprover) {
+        throw new ApiError(
+          403,
+          "You are not authorized to reject this request"
+        );
+      }
+
+      // Update access request status
+      const updatedRequest = await prisma.accessRequest.update({
+        where: { id: requestId },
+        data: {
+          status: "REJECTED",
+          approverId: req.user.id,
+          rejectedAt: new Date(),
+        },
+        include: {
+          requester: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
+          repository: {
+            select: {
+              id: true,
+              name: true,
+              description: true,
+              gitProvider: true,
+              gitRepoUrl: true,
+              ownerId: true,
+            },
+          },
+        },
+      });
+
+      // Create audit log entry
+      await prisma.auditLog.create({
+        data: {
+          action: "ACCESS_REQUEST_REJECTED",
+          entityType: "access_request",
+          entityId: accessRequest.id,
+          description: `Access request for "${accessRequest.repository.name}" rejected`,
+          userId: req.user.id,
+          ipAddress: req.ip,
+          userAgent: req.headers["user-agent"] || "",
+          metadata: {
+            rejectionReason: reason,
+          },
+        },
+      });
+
+      // Send notification to requester
+      await sendAccessRejectedNotification(accessRequest.id);
+
+      res.status(200).json({
+        message: "Access request rejected successfully",
+        accessRequest: updatedRequest,
+      });
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 export { router as accessRequestRouter };
