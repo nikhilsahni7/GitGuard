@@ -8,6 +8,11 @@ GitGuard is a full-stack, production-grade access control and auditing system fo
 
 Think of GitGuard as a **"Just-in-Time IAM layer"** tailored for GitHub. Perfect for fast-moving teams that need security without sacrificing agility.
 
+## 📑 **IMPORTANT FOR JUDGES - Detailed Technical Implementation**
+
+**For detailed technical implementation, Permit.io integration details, and challenge solutions, please see:**
+**[👉 BACKEND README with Implementation Details](/backend/README.md)**
+
 ## 📸 Screenshots
 
 ### 🔐 Login Screen
@@ -37,8 +42,6 @@ Think of GitGuard as a **"Just-in-Time IAM layer"** tailored for GitHub. Perfect
 ### ✔️ Approve Request Flow
 
 ![Approve Request](https://dev-to-uploads.s3.amazonaws.com/uploads/articles/igcrp2oourmdoo6mcwo1.png)
-
-### 📥 Access Request Form
 
 ![Access Request Form](https://dev-to-uploads.s3.amazonaws.com/uploads/articles/dohk7v6h9c1eo1o157xz.png)
 
